@@ -1,0 +1,81 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+token.json
+.token.json
+
+# =========================
+# FastAPI / Uvicorn
+# =========================
+*.log
+logs/
+uvicorn.log
+
+# =========================
+# Playwright
+# =========================
+# Browsers downloaded by Playwright
+ms-playwright/
+
+# Playwright traces, videos, screenshots
+playwright-report/
+test-results/
+trace.zip
+*.zip
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# IDEs / Editors
+# =========================
+.vscode/
+.idea/
+*.iml
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Jupyter / notebooks (se houver)
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Coverage / tests
+# =========================
+.coverage
+htmlcov/
+.pytest_cache/
+
+# =========================
+# MyPy / Ruff / Linters
+# =========================
+.mypy_cache/
+.ruff_cache/
+
+outputs/
