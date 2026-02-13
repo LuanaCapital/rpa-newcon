@@ -2,8 +2,20 @@
 
 from __future__ import annotations
 from dataclasses import dataclass
+from datetime import date, datetime
 from decimal import Decimal
 from playwright.async_api import Page
+
+
+def _parse_br_date(s: str) -> date | None:
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%d/%m/%Y").date()
+    except Exception:
+        return None
+
 
 @dataclass
 class PendenciaLinha:
@@ -118,9 +130,11 @@ class NewconPendenciasPage:
 
         return linhas
 
-    async def resultado_por_cota_todas(self) -> dict:
+    async def resultado_por_cota_todas(self, *, cutoff_date: date | None = None) -> dict:
         """
         Lê o grid e retorna resultado por cota (inclui cotas sem pendência em aberto).
+        Se cutoff_date for informado, considera APENAS pendências com vencimento <= cutoff_date.
+
         Saída:
         {
           "cotas": [
@@ -138,14 +152,25 @@ class NewconPendenciasPage:
 
         saida = []
         for cota, itens in por_cota.items():
-            # pendências em aberto = RECBTO. PARCELA com vl_devido > 0
-            abertas = [
-                x for x in itens
-                if "RECBTO. PARCELA" in x.historico.upper() and x.vl_devido > 0
-            ]
+            abertas = []
+            for x in itens:
+                # pendências em aberto = RECBTO. PARCELA com vl_devido > 0
+                if "RECBTO. PARCELA" not in (x.historico or "").upper():
+                    continue
+                if x.vl_devido <= 0:
+                    continue
+
+                if cutoff_date is not None:
+                    dv = _parse_br_date(x.vencimento)
+                    # se não conseguir parsear, por segurança IGNORA pra não poluir mês analisado
+                    if dv is None:
+                        continue
+                    if dv > cutoff_date:
+                        continue
+
+                abertas.append(x)
 
             if not abertas:
-                # cota sem pendência em aberto → ainda entra no CSV
                 saida.append({
                     "cota": cota,
                     "em_aberto": False,
@@ -153,7 +178,6 @@ class NewconPendenciasPage:
                     "valor": "",
                 })
             else:
-                # uma linha por pendência em aberto daquela cota
                 for a in abertas:
                     saida.append({
                         "cota": cota,
@@ -161,5 +185,5 @@ class NewconPendenciasPage:
                         "vencimento": a.vencimento,
                         "valor": str(a.vl_devido),
                     })
-
+        print(saida)
         return {"cotas": saida}

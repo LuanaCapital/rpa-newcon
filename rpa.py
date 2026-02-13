@@ -68,11 +68,15 @@ async def run_fluxo_newcon(grupo: str, cota: str):
 
 from utils.human_delay import human_delay
 
-async def run_lote(clientes: list[dict]) -> dict:
+async def run_lote(
+    clientes: list[dict],
+    *,
+    analysis_month: int,
+    analysis_year: int,
+) -> dict:
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=False)
 
-        # cria um context e autentica
         context = await browser.new_context()
         newcon_page = await autenticar_e_abrir_newcon(context)
 
@@ -80,38 +84,45 @@ async def run_lote(clientes: list[dict]) -> dict:
             grupo = item["grupo"]
             cota = item["cota"]
 
-            # 1) Se já está bloqueado antes de começar, reautentica
             if await is_session_blocked(newcon_page):
                 await context.close()
                 context = await browser.new_context()
                 newcon_page = await autenticar_e_abrir_newcon(context)
 
-            # 2) Tenta processar o cliente com 1 retry após reauth
             try:
-                await processar_cliente(newcon_page, grupo, cota, csv_path="...")
+                await processar_cliente(
+                    newcon_page,
+                    grupo,
+                    cota,
+                    csv_path="...",
+                    analysis_month=analysis_month,
+                    analysis_year=analysis_year,
+                )
 
-                # 3) Se após processar caiu em bloqueio, forçamos reauth para o próximo
                 if await is_session_blocked(newcon_page):
                     await context.close()
                     context = await browser.new_context()
                     newcon_page = await autenticar_e_abrir_newcon(context)
 
             except Exception:
-                # Se deu erro, checa se foi por bloqueio e tenta 1 vez reautenticando
                 if await is_session_blocked(newcon_page):
                     await context.close()
                     context = await browser.new_context()
                     newcon_page = await autenticar_e_abrir_newcon(context)
 
-                    # retry 1x
-                    await processar_cliente(newcon_page, grupo, cota, csv_path="...")
-
+                    await processar_cliente(
+                        newcon_page,
+                        grupo,
+                        cota,
+                        csv_path="...",
+                        analysis_month=analysis_month,
+                        analysis_year=analysis_year,
+                    )
                 else:
-                    # erro normal: registra no CSV e segue (do seu jeito atual)
-                    # (não dou raise pra não parar lote)
                     pass
 
         await context.close()
         await browser.close()
 
     return {"ok": True}
+

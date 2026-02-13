@@ -4,8 +4,20 @@ from typing import Dict, List, Optional, Tuple
 
 from .schema import COL_GRUPO, COL_COTA
 
+# indexer.py
+import re
+
+def _norm_num_str(v: object) -> str:
+    s = str(v).strip()
+    # remove tudo que não é dígito (se quiser manter só números)
+    s_digits = re.sub(r"\D", "", s)
+    if s_digits == "":
+        return s  # fallback
+    # remove zeros à esquerda: "0089" -> "89"
+    return s_digits.lstrip("0") or "0"
+
 def make_key(grupo: str, cota: str) -> str:
-    return f"{grupo.strip()}::{cota.strip()}"
+    return f"{_norm_num_str(grupo)}::{_norm_num_str(cota)}"
 
 @dataclass
 class SheetIndex:

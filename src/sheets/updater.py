@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Dict, List, Optional
@@ -28,6 +29,20 @@ def _is_empty_cell(v: Optional[str]) -> bool:
     return s == "" or s.lower() == "nan"
 
 
+def _norm_grupo(v: object) -> str:
+    """
+    ✅ Importante: NÃO zfill no grupo, porque no Sheets o grupo está como "6600".
+    """
+    return str(v).strip()
+
+def _norm_num_str(v: object) -> str:
+    s = str(v).strip()
+    s_digits = re.sub(r"\D", "", s)
+    if s_digits == "":
+        return s
+    return s_digits.lstrip("0") or "0"
+
+
 def _get_sheet_id(service: Resource, spreadsheet_id: str, sheet_name: str) -> int:
     meta = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
     for sh in meta.get("sheets", []):
@@ -45,11 +60,8 @@ def _apply_green_background(
     *,
     green_rgb: Dict[str, float] | None = None,
 ) -> None:
-    # Verde padrão (suave)
     if green_rgb is None:
-        green_rgb = {"red": 0.22,
-        "green": 0.55,
-        "blue": 0.24,}
+        green_rgb = {"red": 0.22, "green": 0.55, "blue": 0.24}
 
     requests: List[Dict[str, Any]] = []
     for u in updates:
@@ -87,70 +99,58 @@ def _apply_green_background(
 def sync_payments_to_sheet(
     *,
     spreadsheet_id: str,
-    sheet_name: str,       # nome da aba (ex: "pag2")
-    read_range_a1: str,    # ex: "pag2!A1:ZZ"
-    run_date: date,        # data da execução (ex: date.today())
+    sheet_name: str,
+    read_range_a1: str,
+    run_date: date,
     results: List[RPACotaStatus],
     token_path: str = "./token.json",
     paint_green: bool = True,
 ) -> Dict[str, Any]:
-    """
-    Atualiza a coluna do mês correspondente à run_date (ex: "Janeiro - 2026")
-    preenchendo com a data do pagamento (se vier) ou com ontem (run_date - 1),
-    e opcionalmente pinta a célula de verde.
-
-    Regras:
-    - Só atualiza se item.pago_confirmado == True
-    - Só escreve se a célula estiver vazia
-    - Não sobrescreve valores existentes (inclusive textos como "1 PARC")
-    - Ignora cotas que não existirem na planilha (Grupo+Cota)
-    """
-
     service = get_sheets_service(token_path)
     sheets = service.spreadsheets()
 
-    # 1) Ler valores
     resp = sheets.values().get(
         spreadsheetId=spreadsheet_id,
         range=read_range_a1
     ).execute()
 
     raw_values = resp.get("values", [])
-    # Mantém matriz irregular, mas normaliza células para string
     values: List[List[str]] = [[str(c) for c in row] for row in raw_values]
 
     idx = build_index(values)
 
-    # 2) Coluna do mês alvo
-    month_col_name = month_header(run_date)  # "Janeiro - 2026"
+    month_col_name = month_header(run_date)
     if month_col_name not in idx.col_by_name:
         raise ValueError(f"Coluna do mês não encontrada: '{month_col_name}'.")
 
     month_col = idx.col_by_name[month_col_name]
 
-    # 3) Montar plano de updates
     updates: List[UpdatePlan] = []
 
     for item in results:
         if not item.pago_confirmado:
             continue
 
-        key = make_key(str(item.grupo), str(item.cota))
+        # ✅ chave agora bate com o Sheets: grupo "6600" e cota "0742"
+        grupo_key = _norm_num_str(item.grupo)
+        cota_key = _norm_num_str(item.cota)
+
+        key = make_key(grupo_key, cota_key)
         row_index = idx.row_by_key.get(key)
         if row_index is None:
-            continue  # cota não existe na planilha
+            continue
 
         row = idx.values[row_index] if row_index < len(idx.values) else []
         current = row[month_col] if month_col < len(row) else ""
         if not _is_empty_cell(current):
-            continue  # não sobrescreve
+            continue
 
         value_to_write = (item.data_pagamento or "").strip()
         if not value_to_write:
             value_to_write = format_br(yesterday(run_date))
 
         col_a1 = col_to_a1(month_col)
-        row_a1 = row_index + 1  # A1 é 1-based
+        row_a1 = row_index + 1
         cell_range = f"{sheet_name}!{col_a1}{row_a1}"
 
         updates.append(UpdatePlan(
@@ -161,7 +161,6 @@ def sync_payments_to_sheet(
             reason=f"Pago confirmado; célula vazia em '{month_col_name}'"
         ))
 
-    # 4) Escrever valores em lote
     if not updates:
         return {"updated": 0, "updates": []}
 
@@ -175,7 +174,6 @@ def sync_payments_to_sheet(
         body=body
     ).execute()
 
-    # 5) Pintar fundo verde (opcional)
     if paint_green:
         sheet_id = _get_sheet_id(service, spreadsheet_id, sheet_name)
         _apply_green_background(service, spreadsheet_id, sheet_id, updates)

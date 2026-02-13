@@ -9,5 +9,5 @@ class RPACotaStatus:
     grupo: NumStr
     cota: NumStr
     pago_confirmado: bool
-    # opcional: se sua RPA conseguir a data real do pagamento no sistema:
-    data_pagamento: Optional[str] = None  # "dd/mm/aaaa"
+    data_pagamento: Optional[str] = None
+    boletos_em_aberto: int = 0
