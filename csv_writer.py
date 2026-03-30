@@ -9,6 +9,8 @@ DEFAULT_HEADERS = [
     "cota_pendencia",
     "vencimento",
     "valor",
+    "deal_id",
+    "piperun_result",
     "erro",
 ]
 
