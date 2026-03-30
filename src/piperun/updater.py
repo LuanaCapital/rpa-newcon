@@ -63,6 +63,7 @@ def sync_payment_to_piperun(
     pipeline_id: int = RETENTION_PIPELINE_ID,
     stage_id: int = RETENTION_STAGE_ID,
 ) -> Dict[str, Any]:
+
     status_cota = _find_status_for_cota(results, grupo=grupo, cota=cota)
 
     if status_cota is None:
@@ -70,6 +71,16 @@ def sync_payment_to_piperun(
             "updated": False,
             "reason": "Cota base não encontrada no resultado do RPA.",
             "deal_id": None,
+            "pipeline_id": pipeline_id,
+            "stage_id": stage_id,
+        }
+
+    if not status_cota.pago_confirmado:
+        return {
+            "updated": False,
+            "reason": "Cota não está paga na Newcon — não será enviada ao PipeRun.",
+            "deal_id": None,
+            "boletos_em_aberto": status_cota.boletos_em_aberto,
             "pipeline_id": pipeline_id,
             "stage_id": stage_id,
         }
@@ -86,7 +97,7 @@ def sync_payment_to_piperun(
     if deal is None:
         return {
             "updated": False,
-            "reason": "Nenhuma oportunidade aberta encontrada no funil/etapa informados para grupo/cota.",
+            "reason": "Nenhuma oportunidade encontrada no PipeRun para essa cota.",
             "deal_id": None,
             "pipeline_id": pipeline_id,
             "stage_id": stage_id,
@@ -94,37 +105,17 @@ def sync_payment_to_piperun(
 
     deal_id = int(deal["id"])
 
-    if not status_cota.pago_confirmado:
-        return {
-            "updated": False,
-            "reason": "Cota base ainda possui boletos em aberto.",
-            "deal_id": deal_id,
-            "boletos_em_aberto": status_cota.boletos_em_aberto,
-            "pipeline_id": pipeline_id,
-            "stage_id": stage_id,
-            "deal_title": deal.get("title"),
-        }
-
     payload = _build_won_payload(run_date=run_date)
     response = client.update_deal(deal_id=deal_id, payload=payload)
 
-    result = DealUpdateResult(
-        deal_id=deal_id,
-        grupo=str(grupo),
-        cota=str(cota),
-        payload=payload,
-        reason="Oportunidade marcada como paga no PipeRun.",
-        response=response,
-    )
-
     return {
         "updated": True,
-        "deal_id": result.deal_id,
-        "grupo": result.grupo,
-        "cota": result.cota,
-        "payload": result.payload,
-        "reason": result.reason,
-        "response": result.response,
+        "deal_id": deal_id,
+        "grupo": str(grupo),
+        "cota": str(cota),
+        "payload": payload,
+        "reason": "Oportunidade marcada como ganha no PipeRun.",
+        "response": response,
         "pipeline_id": pipeline_id,
         "stage_id": stage_id,
         "deal_title": deal.get("title"),
