@@ -145,17 +145,6 @@ async def processar_cliente(
         append_rows(csv_path, rows)
 
         logger.info(
-            "Linhas gravadas no CSV com sucesso",
-            extra={
-                "event": "csv_append_success",
-                "grupo": grupo6,
-                "cota": cota4,
-                "rows_count": len(rows),
-                "csv_path": csv_path,
-            },
-        )
-
-        logger.info(
             "Processamento do cliente concluído com sucesso",
             extra={
                 "event": "processar_cliente_success",
