@@ -1,8 +1,11 @@
+from __future__ import annotations
 import os
 import re
-from typing import Any, Dict, List, Optional
-
+from typing import Any, Dict, Optional
 import requests
+from utils.betterstack_logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class PipeRunAPIError(Exception):
@@ -21,9 +24,11 @@ class PipeRunClient:
         self.timeout = timeout
 
         if not self.token:
+            logger.error("PIPERUN_TOKEN não configurado")
             raise ValueError("PIPERUN_TOKEN não configurado")
 
         if not self.base_url:
+            logger.error("PIPERUN_BASE_URL não configurado")
             raise ValueError("PIPERUN_BASE_URL não configurado")
 
     def _headers(self) -> Dict[str, str]:
@@ -36,14 +41,37 @@ class PipeRunClient:
     def _handle_response(self, response: requests.Response, error_prefix: str) -> Dict[str, Any]:
         if response.ok:
             try:
-                return response.json()
+                body = response.json()
             except ValueError:
-                return {"success": True, "message": response.text}
+                body = {"success": True, "message": response.text}
+
+            logger.info(
+                "Resposta recebida do PipeRun com sucesso",
+                extra={
+                    "event": "piperun_response_success",
+                    "status_code": response.status_code,
+                    "url": response.url,
+                    "method": response.request.method if response.request else None,
+                },
+            )
+            return body
 
         try:
             error_body = response.json()
         except ValueError:
             error_body = response.text
+
+        logger.error(
+            "Erro retornado pela API do PipeRun",
+            extra={
+                "event": "piperun_response_error",
+                "status_code": response.status_code,
+                "url": response.url,
+                "method": response.request.method if response.request else None,
+                "error_prefix": error_prefix,
+                "error_body": error_body,
+            },
+        )
 
         raise PipeRunAPIError(
             f"{error_prefix}: HTTP {response.status_code} - {error_body}"
@@ -51,13 +79,25 @@ class PipeRunClient:
 
     def list_deals(self, *, cursor: str = "", show: int = 100) -> Dict[str, Any]:
         url = f"{self.base_url}/deals"
-        response = requests.get(
-            url,
-            headers=self._headers(),
-            params={"cursor": cursor, "show": show},
-            timeout=self.timeout,
-        )
-        return self._handle_response(response, "Erro ao listar oportunidades")
+        try:
+            response = requests.get(
+                url,
+                headers=self._headers(),
+                params={"cursor": cursor, "show": show},
+                timeout=self.timeout,
+            )
+            return self._handle_response(response, "Erro ao listar oportunidades")
+        except requests.RequestException:
+            logger.exception(
+                "Falha de comunicação ao listar oportunidades no PipeRun",
+                extra={
+                    "event": "piperun_list_deals_request_exception",
+                    "url": url,
+                    "cursor": cursor,
+                    "show": show,
+                },
+            )
+            raise
 
     def find_open_retention_deal(
             self,
@@ -111,6 +151,20 @@ class PipeRunClient:
                 if not pattern.search(title):
                     continue
 
+                logger.info(
+                    "Oportunidade aberta encontrada no PipeRun",
+                    extra={
+                        "event": "piperun_open_retention_deal_found",
+                        "grupo": str(grupo),
+                        "cota": str(cota),
+                        "pipeline_id": pipeline_id,
+                        "stage_id": stage_id,
+                        "deal_id": deal.get("id"),
+                        "deal_title": title,
+                        "deal_status": status,
+                    },
+                )
+
                 return deal
 
             meta = payload.get("meta") or {}
@@ -120,17 +174,76 @@ class PipeRunClient:
             if not cursor:
                 break
 
+        logger.warning(
+            "Nenhuma oportunidade aberta encontrada no PipeRun",
+            extra={
+                "event": "piperun_open_retention_deal_not_found",
+                "grupo": str(grupo),
+                "cota": str(cota),
+                "pipeline_id": pipeline_id,
+                "stage_id": stage_id,
+            },
+        )
+
         return None
 
     def update_deal(self, deal_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
         url = f"{self.base_url}/deals/{int(deal_id)}"
-        response = requests.put(
-            url,
-            headers=self._headers(),
-            json=payload,
-            timeout=self.timeout,
+
+        logger.info(
+            "Atualizando oportunidade no PipeRun",
+            extra={
+                "event": "piperun_update_deal_start",
+                "deal_id": int(deal_id),
+                "url": url,
+                "payload": payload,
+            },
         )
-        return self._handle_response(
-            response,
-            f"Erro ao atualizar oportunidade {deal_id}",
-        )
+
+        try:
+            response = requests.put(
+                url,
+                headers=self._headers(),
+                json=payload,
+                timeout=self.timeout,
+            )
+
+            result = self._handle_response(
+                response,
+                f"Erro ao atualizar oportunidade {deal_id}",
+            )
+
+            logger.info(
+                "Oportunidade atualizada com sucesso no PipeRun",
+                extra={
+                    "event": "piperun_update_deal_success",
+                    "deal_id": int(deal_id),
+                    "url": url,
+                    "payload": payload,
+                },
+            )
+
+            return result
+
+        except requests.RequestException:
+            logger.exception(
+                "Falha de comunicação ao atualizar oportunidade no PipeRun",
+                extra={
+                    "event": "piperun_update_deal_request_exception",
+                    "deal_id": int(deal_id),
+                    "url": url,
+                    "payload": payload,
+                },
+            )
+            raise
+        except Exception:
+            logger.exception(
+                "Erro inesperado ao atualizar oportunidade no PipeRun",
+                extra={
+                    "event": "piperun_update_deal_unexpected_exception",
+                    "deal_id": int(deal_id),
+                    "url": url,
+                    "payload": payload,
+                },
+            )
+            raise

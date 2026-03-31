@@ -1,8 +1,10 @@
+from __future__ import annotations
+
+import asyncio
+import calendar
 import traceback
 from datetime import date
-import calendar
 from typing import Any
-import asyncio
 
 from dotenv import load_dotenv
 from playwright.async_api import Page
@@ -13,9 +15,11 @@ from pages.newcon_menu_page import NewconMenuPage
 from pages.newcon_pendencias_page import NewconPendenciasPage
 from csv_writer import append_rows
 from src.piperun.updater import sync_payment_to_piperun
+from utils.betterstack_logger import get_logger
 
 load_dotenv()
 
+logger = get_logger(__name__)
 
 def _zfill(grupo: str, cota: str) -> tuple[str, str]:
     return str(grupo).zfill(6), str(cota).zfill(4)
@@ -62,7 +66,26 @@ async def processar_cliente(
             resultado_por_cota=resultado,
         )
 
-        print(f"[RPA] Iniciando sync PipeRun grupo={grupo6} cota={cota4}")
+        logger.info(
+            "Resultado da Newcon obtido",
+            extra={
+                "event": "newcon_resultado_obtido",
+                "grupo": grupo6,
+                "cota": cota4,
+                "qtd_cotas_resultado": len(resultado.get("cotas", [])),
+                "qtd_cotas_status": len(cotas_do_cliente),
+            },
+        )
+
+        logger.info(
+            "Iniciando sync com PipeRun",
+            extra={
+                "event": "piperun_sync_start",
+                "grupo": grupo6,
+                "cota": cota4,
+                "run_date": run_date.isoformat(),
+            },
+        )
 
         piperun_result = await asyncio.to_thread(
             sync_payment_to_piperun,
@@ -72,7 +95,17 @@ async def processar_cliente(
             results=cotas_do_cliente,
         )
 
-        print(f"[RPA] Resultado PipeRun grupo={grupo6} cota={cota4}: {piperun_result}")
+        logger.info(
+            "Sync com PipeRun concluído",
+            extra={
+                "event": "piperun_sync_done",
+                "grupo": grupo6,
+                "cota": cota4,
+                "deal_id": piperun_result.get("deal_id") if piperun_result else None,
+                "updated": piperun_result.get("updated") if piperun_result else None,
+                "reason": piperun_result.get("reason") if piperun_result else None,
+            },
+        )
 
         rows = []
         for item in resultado.get("cotas", []):
@@ -89,6 +122,14 @@ async def processar_cliente(
             })
 
         if not rows:
+            logger.warning(
+                "Sem linhas no grid de pendências",
+                extra={
+                    "event": "newcon_sem_linhas_grid",
+                    "grupo": grupo6,
+                    "cota": cota4,
+                },
+            )
             rows.append({
                 "grupo_base": grupo6,
                 "cota_base": cota4,
@@ -103,6 +144,27 @@ async def processar_cliente(
 
         append_rows(csv_path, rows)
 
+        logger.info(
+            "Linhas gravadas no CSV com sucesso",
+            extra={
+                "event": "csv_append_success",
+                "grupo": grupo6,
+                "cota": cota4,
+                "rows_count": len(rows),
+                "csv_path": csv_path,
+            },
+        )
+
+        logger.info(
+            "Processamento do cliente concluído com sucesso",
+            extra={
+                "event": "processar_cliente_success",
+                "grupo": grupo6,
+                "cota": cota4,
+                "deal_id": piperun_result.get("deal_id") if piperun_result else None,
+            },
+        )
+
         return {
             "grupo": grupo6,
             "cota": cota4,
@@ -111,8 +173,20 @@ async def processar_cliente(
             "erro": None,
         }
 
-    except Exception as e:
-        erro_detalhado = f"{e}\n{traceback.format_exc()}"
+    except Exception:
+        logger.exception(
+            "Erro ao processar cliente",
+            extra={
+                "event": "processar_cliente_error",
+                "grupo": grupo6,
+                "cota": cota4,
+                "analysis_month": analysis_month,
+                "analysis_year": analysis_year,
+                "csv_path": csv_path,
+            },
+        )
+
+        erro_detalhado = traceback.format_exc()
 
         append_rows(csv_path, [{
             "grupo_base": grupo6,
