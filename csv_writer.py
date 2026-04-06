@@ -12,6 +12,7 @@ DEFAULT_HEADERS = [
     "deal_id",
     "piperun_result",
     "erro",
+    "pago"
 ]
 
 def build_csv_path(base_dir: str = "outputs") -> str:
@@ -29,6 +30,14 @@ def append_rows(csv_path: str, rows: list[dict]):
             writer.writeheader()
 
         for r in rows:
+
+            em_aberto = r.get("em_aberto")
+
+            if isinstance(em_aberto, str):
+                em_aberto = em_aberto.lower() == "true"
+
+            r["pago"] = "Não" if em_aberto else "Sim"
+
             # garante que todas as colunas existem
             out = {h: r.get(h, "") for h in DEFAULT_HEADERS}
             writer.writerow(out)

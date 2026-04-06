@@ -14,6 +14,10 @@ RETENTION_STAGE_ID = int(os.getenv("PIPERUN_RETENTION_STAGE_ID", "625639"))
 
 logger = get_logger(__name__)
 
+PIPERUN_PAID_BY_FIELD_ID = int(os.getenv("PIPERUN_PAID_BY_FIELD_ID", "731079"))
+PIPERUN_PAID_BY_DEFAULT = os.getenv("PIPERUN_PAID_BY_DEFAULT", "Cliente")
+
+
 @dataclass
 class DealUpdateResult:
     deal_id: int
@@ -45,6 +49,17 @@ def _find_status_for_cota(
         if _norm_num_str(item.grupo) == grupo_key and _norm_num_str(item.cota) == cota_key:
             return item
     return None
+
+
+def _build_paid_by_payload(*, paid_by: str) -> Dict[str, Any]:
+    return {
+        "custom_fields": [
+            {
+                "id": PIPERUN_PAID_BY_FIELD_ID,
+                "value": paid_by,
+            }
+        ]
+    }
 
 
 def _build_won_payload(*, run_date: date) -> Dict[str, Any]:
@@ -136,17 +151,58 @@ def sync_payment_to_piperun(
 
         deal_id = int(deal["id"])
 
-        payload = _build_won_payload(run_date=run_date)
-        response = client.update_deal(deal_id=deal_id, payload=payload)
+        paid_by_payload = {
+            "custom_fields": [
+                {
+                    "id": 731079,
+                    "value": "Cliente",
+                }
+            ]
+        }
+
+        client.update_deal(deal_id=deal_id, payload=paid_by_payload)
+
+        return {
+            "updated": True,
+            "deal_id": deal_id,
+            "reason": "Campo 'Foi pago por quem?' atualizado com sucesso.",
+        }
 
         logger.info(
-            "Oportunidade marcada como ganha no PipeRun",
+            "Atualizando campo 'Foi pago por quem?' no PipeRun",
+            extra={
+                "deal_id": deal_id,
+                "grupo": str(grupo),
+                "cota": str(cota),
+                "payload": paid_by_payload,
+            },
+        )
+
+        client.update_deal(deal_id=deal_id, payload=paid_by_payload)
+
+        won_payload = _build_won_payload(run_date=run_date)
+
+        logger.info(
+            "Marcando oportunidade como ganha no PipeRun",
+            extra={
+                "deal_id": deal_id,
+                "grupo": str(grupo),
+                "cota": str(cota),
+                "payload": won_payload,
+            },
+        )
+
+        response = client.update_deal(deal_id=deal_id, payload=won_payload)
+
+        logger.info(
+            "Oportunidade atualizada com sucesso no PipeRun",
             extra={
                 "deal_id": deal_id,
                 "grupo": str(grupo),
                 "cota": str(cota),
                 "deal_title": deal.get("title"),
-                "payload": payload,
+                "paid_by_payload": paid_by_payload,
+                "won_payload": won_payload,
                 "pipeline_id": pipeline_id,
                 "stage_id": stage_id,
             },
@@ -156,9 +212,11 @@ def sync_payment_to_piperun(
             "updated": True,
             "deal_id": deal_id,
             "grupo": str(grupo),
-            "cota": str(cota),
-            "payload": payload,
-            "reason": "Oportunidade marcada como ganha no PipeRun.",
+            "cota": str(cota,
+            ),
+            "payload": won_payload,
+            "paid_by_payload": paid_by_payload,
+            "reason": "Campo obrigatório atualizado e oportunidade marcada como ganha no PipeRun.",
             "response": response,
             "pipeline_id": pipeline_id,
             "stage_id": stage_id,
