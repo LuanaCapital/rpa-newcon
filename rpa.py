@@ -1,5 +1,6 @@
 import os
-
+import json
+import csv
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 
@@ -94,6 +95,21 @@ async def run_lote(
 
         await context.close()
         await browser.close()
+
+        pasta = "relatorios"
+        os.makedirs(pasta, exist_ok=True)
+
+        caminho_csv = os.path.join(pasta, "relatorio_final.csv")
+
+        if resultados:
+            with open(caminho_csv, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=resultados[0].keys())
+                writer.writeheader()
+                writer.writerows(resultados)
+
+            print(f"CSV salvo em: {caminho_csv}")
+        else:
+            print("Nenhum resultado para salvar no CSV")
 
     return {
         "ok": True,
