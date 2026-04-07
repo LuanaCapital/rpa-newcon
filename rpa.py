@@ -102,8 +102,10 @@ async def run_lote(
         caminho_csv = os.path.join(pasta, "relatorio_final.csv")
 
         if resultados:
+            fieldnames = ["grupo", "cota", "resultado", "piperun_result", "pago", "erro"]
+
             with open(caminho_csv, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=resultados[0].keys())
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(resultados)
 

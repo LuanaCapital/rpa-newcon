@@ -154,12 +154,29 @@ async def processar_cliente(
             },
         )
 
+        cotas = resultado.get("cotas", [])
+
+        tem_em_aberto = False
+
+        for item in cotas:
+            em_aberto = item.get("em_aberto")
+
+            if isinstance(em_aberto, str):
+                em_aberto = em_aberto.strip().lower() == "true"
+
+            if em_aberto:
+                tem_em_aberto = True
+                break
+
+        pago = "Não" if tem_em_aberto else "Sim"
+
         return {
             "grupo": grupo6,
             "cota": cota4,
             "resultado": resultado,
             "piperun_result": piperun_result,
             "erro": None,
+            "pago": pago,
         }
 
     except Exception:
@@ -195,4 +212,5 @@ async def processar_cliente(
             "resultado": None,
             "piperun_result": None,
             "erro": erro_detalhado,
+            "pago": ""
         }

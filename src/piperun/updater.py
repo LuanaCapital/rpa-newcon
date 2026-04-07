@@ -151,22 +151,9 @@ def sync_payment_to_piperun(
 
         deal_id = int(deal["id"])
 
-        paid_by_payload = {
-            "custom_fields": [
-                {
-                    "id": 731079,
-                    "value": "Cliente",
-                }
-            ]
-        }
-
-        client.update_deal(deal_id=deal_id, payload=paid_by_payload)
-
-        return {
-            "updated": True,
-            "deal_id": deal_id,
-            "reason": "Campo 'Foi pago por quem?' atualizado com sucesso.",
-        }
+        paid_by_payload = _build_paid_by_payload(
+            paid_by=PIPERUN_PAID_BY_DEFAULT,
+        )
 
         logger.info(
             "Atualizando campo 'Foi pago por quem?' no PipeRun",
@@ -178,7 +165,7 @@ def sync_payment_to_piperun(
             },
         )
 
-        client.update_deal(deal_id=deal_id, payload=paid_by_payload)
+        paid_by_response = client.update_deal(deal_id=deal_id, payload=paid_by_payload)
 
         won_payload = _build_won_payload(run_date=run_date)
 
@@ -192,17 +179,19 @@ def sync_payment_to_piperun(
             },
         )
 
-        response = client.update_deal(deal_id=deal_id, payload=won_payload)
+        won_response = client.update_deal(deal_id=deal_id, payload=won_payload)
 
         logger.info(
-            "Oportunidade atualizada com sucesso no PipeRun",
+            "Tentativas de atualização enviadas ao PipeRun",
             extra={
                 "deal_id": deal_id,
                 "grupo": str(grupo),
                 "cota": str(cota),
                 "deal_title": deal.get("title"),
                 "paid_by_payload": paid_by_payload,
+                "paid_by_response": paid_by_response,
                 "won_payload": won_payload,
+                "won_response": won_response,
                 "pipeline_id": pipeline_id,
                 "stage_id": stage_id,
             },
@@ -212,12 +201,12 @@ def sync_payment_to_piperun(
             "updated": True,
             "deal_id": deal_id,
             "grupo": str(grupo),
-            "cota": str(cota,
-            ),
+            "cota": str(cota),
             "payload": won_payload,
             "paid_by_payload": paid_by_payload,
-            "reason": "Campo obrigatório atualizado e oportunidade marcada como ganha no PipeRun.",
-            "response": response,
+            "paid_by_response": paid_by_response,
+            "response": won_response,
+            "reason": "Campo obrigatório atualizado e tentativa de marcar oportunidade como ganha enviada ao PipeRun.",
             "pipeline_id": pipeline_id,
             "stage_id": stage_id,
             "deal_title": deal.get("title"),
