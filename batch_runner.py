@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import calendar
+import csv
+import os
 import traceback
 from datetime import date
 from typing import Any
@@ -20,6 +22,26 @@ from utils.betterstack_logger import get_logger
 load_dotenv()
 
 logger = get_logger(__name__)
+
+FINAL_HEADERS = ["grupo", "cota", "resultado", "piperun_result", "pago", "erro"]
+
+
+def append_relatorio_final(csv_path: str, row: dict):
+    directory = os.path.dirname(csv_path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
+    file_exists = os.path.exists(csv_path)
+
+    with open(csv_path, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=FINAL_HEADERS)
+
+        if not file_exists:
+            writer.writeheader()
+
+        out = {h: row.get(h, "") for h in FINAL_HEADERS}
+        writer.writerow(out)
+
 
 def _zfill(grupo: str, cota: str) -> tuple[str, str]:
     return str(grupo).zfill(6), str(cota).zfill(4)
@@ -40,6 +62,7 @@ async def processar_cliente(
     grupo: str,
     cota: str,
     csv_path: str,
+    final_csv_path: str,
     *,
     analysis_month: int,
     analysis_year: int,
@@ -155,7 +178,6 @@ async def processar_cliente(
         )
 
         cotas = resultado.get("cotas", [])
-
         tem_em_aberto = False
 
         for item in cotas:
@@ -169,6 +191,17 @@ async def processar_cliente(
                 break
 
         pago = "Não" if tem_em_aberto else "Sim"
+
+        final_row = {
+            "grupo": grupo6,
+            "cota": cota4,
+            "resultado": str(resultado),
+            "piperun_result": str(piperun_result) if piperun_result else "",
+            "pago": pago,
+            "erro": "",
+        }
+
+        append_relatorio_final(final_csv_path, final_row)
 
         return {
             "grupo": grupo6,
@@ -206,11 +239,22 @@ async def processar_cliente(
             "erro": erro_detalhado,
         }])
 
+        final_row = {
+            "grupo": grupo6,
+            "cota": cota4,
+            "resultado": "",
+            "piperun_result": "",
+            "pago": "",
+            "erro": erro_detalhado,
+        }
+
+        append_relatorio_final(final_csv_path, final_row)
+
         return {
             "grupo": grupo6,
             "cota": cota4,
             "resultado": None,
             "piperun_result": None,
             "erro": erro_detalhado,
-            "pago": ""
+            "pago": "",
         }

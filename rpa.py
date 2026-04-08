@@ -1,6 +1,4 @@
 import os
-import json
-import csv
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 
@@ -74,6 +72,10 @@ async def run_lote(
         context = await browser.new_context()
         newcon_page = await autenticar_e_abrir_newcon(context)
 
+        os.makedirs("relatorios", exist_ok=True)
+        csv_path = os.path.join("relatorios", "resultado_lote.csv")
+        final_csv_path = os.path.join("relatorios", "relatorio_final.csv")
+
         for item in clientes:
             grupo = item["grupo"]
             cota = item["cota"]
@@ -87,7 +89,8 @@ async def run_lote(
                 newcon_page,
                 grupo,
                 cota,
-                csv_path="resultado_lote.csv",
+                csv_path=csv_path,
+                final_csv_path=final_csv_path,
                 analysis_month=analysis_month,
                 analysis_year=analysis_year,
             )
@@ -96,20 +99,8 @@ async def run_lote(
         await context.close()
         await browser.close()
 
-        pasta = "relatorios"
-        os.makedirs(pasta, exist_ok=True)
-
-        caminho_csv = os.path.join(pasta, "relatorio_final.csv")
-
         if resultados:
-            fieldnames = ["grupo", "cota", "resultado", "piperun_result", "pago", "erro"]
-
-            with open(caminho_csv, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(resultados)
-
-            print(f"CSV salvo em: {caminho_csv}")
+            print(f"CSV atualizado em: {final_csv_path}")
         else:
             print("Nenhum resultado para salvar no CSV")
 
