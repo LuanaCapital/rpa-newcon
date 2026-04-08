@@ -76,8 +76,14 @@ async def run_lote(
         csv_path = os.path.join("relatorios", "resultado_lote.csv")
         final_csv_path = os.path.join("relatorios", "relatorio_final.csv")
 
+        clientes_agrupados = {}
         for item in clientes:
             grupo = item["grupo"]
+
+            if grupo not in clientes_agrupados:
+                clientes_agrupados[grupo] = item
+
+        for grupo, item in clientes_agrupados.items():
             cota = item["cota"]
 
             if await is_session_blocked(newcon_page):
@@ -94,6 +100,7 @@ async def run_lote(
                 analysis_month=analysis_month,
                 analysis_year=analysis_year,
             )
+
             resultados.append(resultado)
 
         await context.close()

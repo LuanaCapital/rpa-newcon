@@ -84,6 +84,20 @@ async def processar_cliente(
 
         resultado = await pendencias.resultado_por_cota_todas(cutoff_date=cutoff)
 
+        cotas_filtradas = []
+        cotas_vistas = set()
+
+        for item in resultado.get("cotas", []):
+            chave = (item.get("cota"), item.get("vencimento"))
+
+            if chave in cotas_vistas:
+                continue
+
+            cotas_vistas.add(chave)
+            cotas_filtradas.append(item)
+
+        resultado["cotas"] = cotas_filtradas
+
         cotas_do_cliente = newcon_result_to_cota_status(
             grupo=int(grupo6),
             resultado_por_cota=resultado,
