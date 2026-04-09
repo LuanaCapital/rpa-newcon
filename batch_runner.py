@@ -146,6 +146,7 @@ async def processar_cliente(
 
         rows = []
         for item in resultado.get("cotas", []):
+            piperun_reason = piperun_result.get("reason", "") if piperun_result else ""
             rows.append({
                 "grupo_base": grupo6,
                 "cota_base": cota4,
@@ -154,7 +155,7 @@ async def processar_cliente(
                 "vencimento": item.get("vencimento", ""),
                 "valor": item.get("valor", ""),
                 "deal_id": piperun_result.get("deal_id") or "",
-                "piperun_result": str(piperun_result) if piperun_result else "",
+                "piperun_result": piperun_reason,
                 "erro": "",
             })
 
@@ -167,6 +168,7 @@ async def processar_cliente(
                     "cota": cota4,
                 },
             )
+            piperun_reason = piperun_result.get("reason", "") if piperun_result else ""
             rows.append({
                 "grupo_base": grupo6,
                 "cota_base": cota4,
@@ -175,7 +177,7 @@ async def processar_cliente(
                 "vencimento": "",
                 "valor": "",
                 "deal_id": piperun_result.get("deal_id") or "",
-                "piperun_result": str(piperun_result) if piperun_result else "",
+                "piperun_result": piperun_reason,
                 "erro": "Sem linhas no grid",
             })
 

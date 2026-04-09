@@ -143,7 +143,7 @@ def sync_payment_to_piperun(
             )
             return {
                 "updated": False,
-                "reason": "Nenhuma oportunidade encontrada no PipeRun para essa cota.",
+                "reason": "NÃO ENCONTRADO NO PIPERUN - Oportunidade não localizada após buscar 50 páginas.",
                 "deal_id": None,
                 "pipeline_id": pipeline_id,
                 "stage_id": stage_id,

@@ -106,6 +106,7 @@ class PipeRunClient:
             cota: object,
             pipeline_id: int,
             stage_id: int,
+            max_pages: int = 50,
     ) -> Optional[Dict[str, Any]]:
         grupo_num = str(grupo).lstrip("0")
         cota_num = str(cota).lstrip("0")
@@ -115,10 +116,24 @@ class PipeRunClient:
         )
 
         cursor = ""
+        page_count = 0
 
-        while True:
+        while page_count < max_pages:
             payload = self.list_deals(cursor=cursor)
             data = payload.get("data") or []
+            page_count += 1
+
+            logger.info(
+                "Procurando deal no PipeRun",
+                extra={
+                    "event": "piperun_searching_deal",
+                    "grupo": str(grupo),
+                    "cota": str(cota),
+                    "page": page_count,
+                    "max_pages": max_pages,
+                    "deals_nesta_pagina": len(data),
+                },
+            )
 
             for deal in data:
                 deal_pipeline_id = (
@@ -162,6 +177,7 @@ class PipeRunClient:
                         "deal_id": deal.get("id"),
                         "deal_title": title,
                         "deal_status": status,
+                        "page": page_count,
                     },
                 )
 
@@ -172,16 +188,27 @@ class PipeRunClient:
             cursor = cursor_info.get("next") or ""
 
             if not cursor:
+                logger.info(
+                    "Fim da paginação do PipeRun",
+                    extra={
+                        "event": "piperun_pagination_end",
+                        "grupo": str(grupo),
+                        "cota": str(cota),
+                        "paginas_processadas": page_count,
+                    },
+                )
                 break
 
         logger.warning(
-            "Nenhuma oportunidade aberta encontrada no PipeRun",
+            "Nenhuma oportunidade aberta encontrada no PipeRun após buscar",
             extra={
                 "event": "piperun_open_retention_deal_not_found",
                 "grupo": str(grupo),
                 "cota": str(cota),
                 "pipeline_id": pipeline_id,
                 "stage_id": stage_id,
+                "paginas_buscadas": page_count,
+                "max_pages": max_pages,
             },
         )
 
