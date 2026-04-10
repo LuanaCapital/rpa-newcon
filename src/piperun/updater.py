@@ -7,9 +7,15 @@ from typing import Any, Dict, List, Optional
 
 from src.domain.types import RPACotaStatus
 from src.piperun.client import PipeRunClient
+from utils.betterstack_logger import get_logger
 
 RETENTION_PIPELINE_ID = int(os.getenv("PIPERUN_RETENTION_PIPELINE_ID", "97775"))
 RETENTION_STAGE_ID = int(os.getenv("PIPERUN_RETENTION_STAGE_ID", "625639"))
+
+logger = get_logger(__name__)
+
+PIPERUN_PAID_BY_FIELD_ID = int(os.getenv("PIPERUN_PAID_BY_FIELD_ID", "731079"))
+PIPERUN_PAID_BY_DEFAULT = os.getenv("PIPERUN_PAID_BY_DEFAULT", "Cliente")
 
 
 @dataclass
@@ -45,6 +51,17 @@ def _find_status_for_cota(
     return None
 
 
+def _build_paid_by_payload(*, paid_by: str) -> Dict[str, Any]:
+    return {
+        "custom_fields": [
+            {
+                "id": PIPERUN_PAID_BY_FIELD_ID,
+                "value": paid_by,
+            }
+        ]
+    }
+
+
 def _build_won_payload(*, run_date: date) -> Dict[str, Any]:
     return {
         "status": 1,
@@ -67,6 +84,15 @@ def sync_payment_to_piperun(
     status_cota = _find_status_for_cota(results, grupo=grupo, cota=cota)
 
     if status_cota is None:
+        logger.warning(
+            "Cota base não encontrada no resultado do RPA",
+            extra={
+                "grupo": str(grupo),
+                "cota": str(cota),
+                "pipeline_id": pipeline_id,
+                "stage_id": stage_id,
+            },
+        )
         return {
             "updated": False,
             "reason": "Cota base não encontrada no resultado do RPA.",
@@ -76,6 +102,16 @@ def sync_payment_to_piperun(
         }
 
     if not status_cota.pago_confirmado:
+        logger.info(
+            "Cota não está paga na Newcon; sync com PipeRun não será executado",
+            extra={
+                "grupo": str(grupo),
+                "cota": str(cota),
+                "boletos_em_aberto": status_cota.boletos_em_aberto,
+                "pipeline_id": pipeline_id,
+                "stage_id": stage_id,
+            },
+        )
         return {
             "updated": False,
             "reason": "Cota não está paga na Newcon — não será enviada ao PipeRun.",
@@ -85,38 +121,105 @@ def sync_payment_to_piperun(
             "stage_id": stage_id,
         }
 
-    client = PipeRunClient(token=token, base_url=base_url)
+    try:
+        client = PipeRunClient(token=token, base_url=base_url)
 
-    deal = client.find_open_retention_deal(
-        grupo=grupo,
-        cota=cota,
-        pipeline_id=pipeline_id,
-        stage_id=stage_id,
-    )
+        deal = client.find_open_retention_deal(
+            grupo=grupo,
+            cota=cota,
+            pipeline_id=pipeline_id,
+            stage_id=stage_id,
+        )
 
-    if deal is None:
+        if deal is None:
+            logger.warning(
+                "Nenhuma oportunidade encontrada no PipeRun para a cota",
+                extra={
+                    "grupo": str(grupo),
+                    "cota": str(cota),
+                    "pipeline_id": pipeline_id,
+                    "stage_id": stage_id,
+                },
+            )
+            return {
+                "updated": False,
+                "reason": "NÃO ENCONTRADO NO PIPERUN - Oportunidade não localizada após buscar 50 páginas.",
+                "deal_id": None,
+                "pipeline_id": pipeline_id,
+                "stage_id": stage_id,
+            }
+
+        deal_id = int(deal["id"])
+
+        paid_by_payload = _build_paid_by_payload(
+            paid_by=PIPERUN_PAID_BY_DEFAULT,
+        )
+
+        logger.info(
+            "Atualizando campo 'Foi pago por quem?' no PipeRun",
+            extra={
+                "deal_id": deal_id,
+                "grupo": str(grupo),
+                "cota": str(cota),
+                "payload": paid_by_payload,
+            },
+        )
+
+        paid_by_response = client.update_deal(deal_id=deal_id, payload=paid_by_payload)
+
+        won_payload = _build_won_payload(run_date=run_date)
+
+        logger.info(
+            "Marcando oportunidade como ganha no PipeRun",
+            extra={
+                "deal_id": deal_id,
+                "grupo": str(grupo),
+                "cota": str(cota),
+                "payload": won_payload,
+            },
+        )
+
+        won_response = client.update_deal(deal_id=deal_id, payload=won_payload)
+
+        logger.info(
+            "Tentativas de atualização enviadas ao PipeRun",
+            extra={
+                "deal_id": deal_id,
+                "grupo": str(grupo),
+                "cota": str(cota),
+                "deal_title": deal.get("title"),
+                "paid_by_payload": paid_by_payload,
+                "paid_by_response": paid_by_response,
+                "won_payload": won_payload,
+                "won_response": won_response,
+                "pipeline_id": pipeline_id,
+                "stage_id": stage_id,
+            },
+        )
+
         return {
-            "updated": False,
-            "reason": "Nenhuma oportunidade encontrada no PipeRun para essa cota.",
-            "deal_id": None,
+            "updated": True,
+            "deal_id": deal_id,
+            "grupo": str(grupo),
+            "cota": str(cota),
+            "payload": won_payload,
+            "paid_by_payload": paid_by_payload,
+            "paid_by_response": paid_by_response,
+            "response": won_response,
+            "reason": "Campo obrigatório atualizado e tentativa de marcar oportunidade como ganha enviada ao PipeRun.",
             "pipeline_id": pipeline_id,
             "stage_id": stage_id,
+            "deal_title": deal.get("title"),
         }
 
-    deal_id = int(deal["id"])
-
-    payload = _build_won_payload(run_date=run_date)
-    response = client.update_deal(deal_id=deal_id, payload=payload)
-
-    return {
-        "updated": True,
-        "deal_id": deal_id,
-        "grupo": str(grupo),
-        "cota": str(cota),
-        "payload": payload,
-        "reason": "Oportunidade marcada como ganha no PipeRun.",
-        "response": response,
-        "pipeline_id": pipeline_id,
-        "stage_id": stage_id,
-        "deal_title": deal.get("title"),
-    }
+    except Exception:
+        logger.exception(
+            "Erro ao sincronizar pagamento com PipeRun",
+            extra={
+                "grupo": str(grupo),
+                "cota": str(cota),
+                "pipeline_id": pipeline_id,
+                "stage_id": stage_id,
+            },
+        )
+        raise

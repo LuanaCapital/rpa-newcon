@@ -12,6 +12,7 @@ DEFAULT_HEADERS = [
     "deal_id",
     "piperun_result",
     "erro",
+    "pago"
 ]
 
 def build_csv_path(base_dir: str = "outputs") -> str:
@@ -22,6 +23,37 @@ def build_csv_path(base_dir: str = "outputs") -> str:
 def append_rows(csv_path: str, rows: list[dict]):
     file_exists = os.path.exists(csv_path)
 
+    # 🔁 Se arquivo existe, verifica header
+    if file_exists:
+        with open(csv_path, "r", encoding="utf-8") as f:
+            first_line = f.readline().strip()
+
+        headers_existentes = first_line.split(",")
+
+        # se faltar a coluna pago → recria o arquivo
+        if "pago" not in headers_existentes:
+            with open(csv_path, "r", encoding="utf-8") as f:
+                reader = list(csv.DictReader(f))
+
+            # recria com novo header
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=DEFAULT_HEADERS)
+                writer.writeheader()
+
+                for r in reader:
+                    em_aberto = r.get("em_aberto")
+
+                    if isinstance(em_aberto, str):
+                        em_aberto = em_aberto.lower() == "true"
+
+                    r["pago"] = "Não" if em_aberto else "Sim"
+
+                    out = {h: r.get(h, "") for h in DEFAULT_HEADERS}
+                    writer.writerow(out)
+
+    # agora sim append normal
+    file_exists = os.path.exists(csv_path)
+
     with open(csv_path, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=DEFAULT_HEADERS)
 
@@ -29,6 +61,12 @@ def append_rows(csv_path: str, rows: list[dict]):
             writer.writeheader()
 
         for r in rows:
-            # garante que todas as colunas existem
+            em_aberto = r.get("em_aberto")
+
+            if isinstance(em_aberto, str):
+                em_aberto = em_aberto.lower() == "true"
+
+            r["pago"] = "Não" if em_aberto else "Sim"
+
             out = {h: r.get(h, "") for h in DEFAULT_HEADERS}
             writer.writerow(out)
