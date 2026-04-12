@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 
-from batch_runner import processar_cliente
+from batch_runner import processar_cliente, logger
 from pages.auth_flow import autenticar_e_abrir_newcon
 from pages.login import LoginPage
 from pages.newcon_atendimento_page import NewconAtendimentoPage
@@ -12,6 +12,7 @@ from pages.parceiros_home_page import ParceirosHomePage
 from pages.newcon_login_page import NewconLoginPage
 from pages.session_guard import is_session_blocked
 from playwright_stealth import apply_stealth_to_page, setup_context_with_stealth
+from utils.report_helper import salvar_resultado
 
 load_dotenv()
 
@@ -74,6 +75,7 @@ async def run_lote(
     *,
     analysis_month: int,
     analysis_year: int,
+    execution_id: str,
 ) -> dict:
     resultados = []
 
@@ -88,13 +90,26 @@ async def run_lote(
         newcon_page = await autenticar_e_abrir_newcon(context)
 
         os.makedirs("relatorios", exist_ok=True)
-        csv_path = os.path.join("relatorios", "resultado_lote120426.csv")
-        final_csv_path = os.path.join("relatorios", "relatorio_final120426.csv")
+        data_str = f"{analysis_year}-{analysis_month:02d}"
+
+        csv_path = os.path.join("relatorios", f"resultado_lote_{data_str}.csv")
+        final_csv_path = os.path.join("relatorios", f"relatorio_final_{data_str}.csv")
 
         # Processar todos os clientes sem agrupamento
         for item in clientes:
             grupo = item["grupo"]
             cota = item["cota"]
+
+            logger.info(
+                "Processando cliente",
+                extra={
+                    "execution_id": execution_id,
+                    "grupo": grupo,
+                    "cota": cota,
+                    "analysis_month": analysis_month,
+                    "analysis_year": analysis_year,
+                },
+            )
 
             if await is_session_blocked(newcon_page):
                 await context.close()
@@ -114,8 +129,12 @@ async def run_lote(
                 analysis_month=analysis_month,
                 analysis_year=analysis_year,
             )
-
             resultados.append(resultado)
+
+            try:
+                salvar_resultado(execution_id, resultado)
+            except Exception as e:
+                print(f"Erro ao salvar relatório: {e}")
 
         await context.close()
         await browser.close()

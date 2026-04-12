@@ -13,6 +13,7 @@ class ClienteItem(BaseModel):
 
 
 class NewconLoteRequest(BaseModel):
+    execution_id: str
     analysis_month: int = Field(..., ge=1, le=12, description="Mês de análise (1-12)")
     analysis_year: int = Field(..., ge=2000, le=2100, description="Ano de análise (ex: 2026)")
     clientes: List[ClienteItem]
@@ -32,6 +33,7 @@ async def newcon_lote(payload: NewconLoteRequest):
             [c.model_dump() for c in payload.clientes],
             analysis_month=payload.analysis_month,
             analysis_year=payload.analysis_year,
+            execution_id=payload.execution_id,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
