@@ -88,8 +88,8 @@ async def run_lote(
         newcon_page = await autenticar_e_abrir_newcon(context)
 
         os.makedirs("relatorios", exist_ok=True)
-        csv_path = os.path.join("relatorios", "resultado_lote.csv")
-        final_csv_path = os.path.join("relatorios", "relatorio_final.csv")
+        csv_path = os.path.join("relatorios", "resultado_lote120426.csv")
+        final_csv_path = os.path.join("relatorios", "relatorio_final120426.csv")
 
         # Processar todos os clientes sem agrupamento
         for item in clientes:

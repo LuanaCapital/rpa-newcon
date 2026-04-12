@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from src.domain.types import RPACotaStatus
 from src.piperun.client import PipeRunClient
 from utils.betterstack_logger import get_logger
+from utils.bigquery_helper import pode_atualizar_oportunidade
 
 RETENTION_PIPELINE_ID = int(os.getenv("PIPERUN_RETENTION_PIPELINE_ID", "97775"))
 RETENTION_STAGE_ID = int(os.getenv("PIPERUN_RETENTION_STAGE_ID", "625639"))
@@ -151,6 +152,37 @@ def sync_payment_to_piperun(
 
         deal_id = int(deal["id"])
 
+        mes_payload = run_date.month
+
+        try:
+            if not pode_atualizar_oportunidade(deal_id, mes_payload):
+                logger.info(
+                    "Pulando oportunidade (status ou mês inválido)",
+                    extra={
+                        "deal_id": deal_id,
+                        "mes_payload": mes_payload,
+                    },
+                )
+                return {
+                    "updated": False,
+                    "reason": "Pulado - status ou mês inválido",
+                    "deal_id": deal_id,
+                }
+
+        except Exception as e:
+            logger.error(
+                "Erro ao validar oportunidade no BigQuery",
+                extra={
+                    "deal_id": deal_id,
+                    "error": str(e),
+                },
+            )
+            return {
+                "updated": False,
+                "reason": "Erro ao validar oportunidade no BigQuery",
+                "deal_id": deal_id,
+            }
+
         paid_by_payload = _build_paid_by_payload(
             paid_by=PIPERUN_PAID_BY_DEFAULT,
         )
@@ -167,19 +199,22 @@ def sync_payment_to_piperun(
 
         paid_by_response = client.update_deal(deal_id=deal_id, payload=paid_by_payload)
 
-        won_payload = _build_won_payload(run_date=run_date)
-
-        logger.info(
-            "Marcando oportunidade como ganha no PipeRun",
-            extra={
-                "deal_id": deal_id,
-                "grupo": str(grupo),
-                "cota": str(cota),
-                "payload": won_payload,
-            },
-        )
-
-        won_response = client.update_deal(deal_id=deal_id, payload=won_payload)
+        # COMENTADO: Atualização da oportunidade para "ganha" foi comentada
+        # won_payload = _build_won_payload(run_date=run_date)
+        #
+        # logger.info(
+        #     "Marcando oportunidade como ganha no PipeRun",
+        #     extra={
+        #         "deal_id": deal_id,
+        #         "grupo": str(grupo),
+        #         "cota": str(cota),
+        #         "payload": won_payload,
+        #     },
+        # )
+        #
+        # won_response = client.update_deal(deal_id=deal_id, payload=won_payload)
+        won_payload = None
+        won_response = None
 
         logger.info(
             "Tentativas de atualização enviadas ao PipeRun",
