@@ -1,50 +1,69 @@
-import json
+import csv
 import os
-from typing import Dict, Any
 
-REPORTS_DIR = "reports"
-
-
-def _get_file_path(execution_id: str) -> str:
-    return os.path.join(REPORTS_DIR, f"{execution_id}.json")
+CSV_DIR = "relatorios"
 
 
-def salvar_resultado(execution_id: str, resultado: dict) -> None:
-    os.makedirs(REPORTS_DIR, exist_ok=True)
+def salvar_resultado_csv(execution_id: str, resultado: dict):
+    os.makedirs(CSV_DIR, exist_ok=True)
 
-    path = _get_file_path(execution_id)
+    path = os.path.join(CSV_DIR, f"{execution_id}.csv")
+
+    cotas = resultado.get("resultado", {}).get("cotas", [])
+
+    existentes = set()
 
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
-            dados = json.load(f)
-    else:
-        dados = []
+            reader = csv.DictReader(f)
+            for row in reader:
+                chave = (row.get("deal_id"), row.get("cota_pendencia"))
+                existentes.add(chave)
 
-    if any(
-        d.get("deal_id") == resultado.get("deal_id")
-        and d.get("cota") == resultado.get("cota")
-        for d in dados
-    ):
-        return
+    file_exists = os.path.exists(path)
 
-    dados.append(resultado)
+    with open(path, "a", newline="", encoding="utf-8") as csvfile:
+        writer = csv.DictWriter(
+            csvfile,
+            fieldnames=[
+                "deal_id",
+                "grupo",
+                "cota",
+                "pago",
+                "cota_pendencia",
+                "vencimento",
+                "valor",
+                "resultado",
+                "piperun_result",
+                "erro",
+            ],
+        )
 
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(dados, f, indent=2, ensure_ascii=False)
+        if not file_exists:
+            writer.writeheader()
 
+        for cota_item in cotas:
+            chave = (
+                str(resultado.get("piperun_result", {}).get("deal_id")),
+                str(cota_item.get("cota")),
+            )
 
-def gerar_resumo(execution_id: str) -> Dict[str, Any]:
-    path = _get_file_path(execution_id)
+            if chave in existentes:
+                continue
 
-    if not os.path.exists(path):
-        return {"execution_id": execution_id, "total": 0}
-
-    with open(path, "r", encoding="utf-8") as f:
-        dados = json.load(f)
-
-    return {
-        "execution_id": execution_id,
-        "total": len(dados),
-        "updated": sum(1 for d in dados if d.get("updated")),
-        "skipped": sum(1 for d in dados if not d.get("updated")),
-    }
+            writer.writerow(
+                {
+                    "deal_id": resultado.get("piperun_result", {}).get("deal_id"),
+                    "grupo": resultado.get("grupo"),
+                    "cota": resultado.get("cota"),
+                    "pago": resultado.get("pago"),
+                    "cota_pendencia": cota_item.get("cota"),
+                    "vencimento": cota_item.get("vencimento"),
+                    "valor": cota_item.get("valor"),
+                    "resultado": "Sem pendência"
+                    if not cota_item.get("em_aberto")
+                    else "Com pendência",
+                    "piperun_result": resultado.get("piperun_result", {}).get("reason"),
+                    "erro": resultado.get("erro"),
+                }
+            )

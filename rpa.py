@@ -12,7 +12,7 @@ from pages.parceiros_home_page import ParceirosHomePage
 from pages.newcon_login_page import NewconLoginPage
 from pages.session_guard import is_session_blocked
 from playwright_stealth import apply_stealth_to_page, setup_context_with_stealth
-from utils.report_helper import salvar_resultado
+from utils.report_helper import salvar_resultado, salvar_resultado_csv
 
 load_dotenv()
 
@@ -131,16 +131,42 @@ async def run_lote(
             )
             resultados.append(resultado)
 
+            if resultado.get("erro"):
+                logger.warning(
+                    "Cliente com erro no processamento",
+                    extra={
+                        "execution_id": execution_id,
+                        "grupo": grupo,
+                        "cota": cota,
+                        "erro": resultado.get("erro"),
+                    },
+                )
+
             try:
-                salvar_resultado(execution_id, resultado)
+                salvar_resultado_csv(execution_id, resultado)
             except Exception as e:
-                print(f"Erro ao salvar relatório: {e}")
+                logger.error(
+                    "Erro ao salvar relatório",
+                    extra={
+                        "execution_id": execution_id,
+                        "grupo": grupo,
+                        "cota": cota,
+                        "error": str(e),
+                    },
+                )
 
         await context.close()
         await browser.close()
 
         if resultados:
-            print(f"CSV atualizado em: {final_csv_path}")
+            logger.info(
+                "Processamento finalizado",
+                extra={
+                    "execution_id": execution_id,
+                    "total_clientes": len(resultados),
+                    "csv_path": final_csv_path,
+                },
+            )
         else:
             print("Nenhum resultado para salvar no CSV")
 
