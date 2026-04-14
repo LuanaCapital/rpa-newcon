@@ -2,8 +2,8 @@ import os
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 
-from batch_runner import processar_cliente, logger
-from pages.auth_flow import autenticar_e_abrir_newcon
+from batch_runner import processar_cliente, logger, consultar_cliente_canopus
+from pages.auth_flow import autenticar_e_abrir_newcon, autenticar_e_abrir_newcon_rodobens
 from pages.login import LoginPage
 from pages.newcon_atendimento_page import NewconAtendimentoPage
 from pages.newcon_menu_page import NewconMenuPage
@@ -26,7 +26,7 @@ if not LOGIN or not PASSWORD or not URL_LOGIN_PARCEIROS:
 
 async def run_fluxo_newcon(grupo: str, cota: str):
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=False)
         context = await browser.new_context()
 
         await setup_context_with_stealth(context)
@@ -73,23 +73,28 @@ async def run_lote(
     analysis_month: int,
     analysis_year: int,
     execution_id: str,
+    tipo_login: str = "canopus",
 ) -> dict:
     resultados = []
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=False)
 
         context = await browser.new_context()
-
         await setup_context_with_stealth(context)
 
-        newcon_page = await autenticar_e_abrir_newcon(context)
+        if tipo_login == "rodobens":
+            newcon_page = await autenticar_e_abrir_newcon_rodobens(context)
+        else:
+            newcon_page = await autenticar_e_abrir_newcon(context)
 
         os.makedirs("relatorios", exist_ok=True)
         data_str = f"{analysis_year}-{analysis_month:02d}"
 
         csv_path = os.path.join("relatorios", f"resultado_lote_{data_str}.csv")
         final_csv_path = os.path.join("relatorios", f"relatorio_final_{data_str}.csv")
+        consulta_csv_path = os.path.join("relatorios", f"consulta_canopus_{data_str}.csv")
+        consulta_COTAS_csv_path = os.path.join("relatorios", f"consulta_cotas_canopus{data_str}.csv")
 
         for item in clientes:
             grupo = item["grupo"]
@@ -103,26 +108,39 @@ async def run_lote(
                     "cota": cota,
                     "analysis_month": analysis_month,
                     "analysis_year": analysis_year,
+                    "tipo_login": tipo_login,
                 },
             )
 
             if await is_session_blocked(newcon_page):
                 await context.close()
                 context = await browser.new_context()
-
                 await setup_context_with_stealth(context)
 
-                newcon_page = await autenticar_e_abrir_newcon(context)
+                if tipo_login == "rodobens":
+                    newcon_page = await autenticar_e_abrir_newcon_rodobens(context)
+                else:
+                    newcon_page = await autenticar_e_abrir_newcon(context)
 
-            resultado = await processar_cliente(
-                newcon_page,
-                grupo,
-                cota,
-                csv_path=csv_path,
-                final_csv_path=final_csv_path,
-                analysis_month=analysis_month,
-                analysis_year=analysis_year,
-            )
+            if tipo_login == "canopus":
+                resultado = await consultar_cliente_canopus(
+                    newcon_page,
+                    grupo,
+                    cota,
+                    csv_path=consulta_csv_path,
+                    final_csv_path=consulta_COTAS_csv_path,
+                )
+            else:
+                resultado = await processar_cliente(
+                    newcon_page,
+                    grupo,
+                    cota,
+                    csv_path=csv_path,
+                    final_csv_path=final_csv_path,
+                    analysis_month=analysis_month,
+                    analysis_year=analysis_year,
+                )
+
             resultados.append(resultado)
 
             if resultado.get("erro"):
@@ -133,6 +151,7 @@ async def run_lote(
                         "grupo": grupo,
                         "cota": cota,
                         "erro": resultado.get("erro"),
+                        "tipo_login": tipo_login,
                     },
                 )
 
@@ -146,6 +165,7 @@ async def run_lote(
                         "grupo": grupo,
                         "cota": cota,
                         "error": str(e),
+                        "tipo_login": tipo_login,
                     },
                 )
 
@@ -158,7 +178,7 @@ async def run_lote(
                 extra={
                     "execution_id": execution_id,
                     "total_clientes": len(resultados),
-                    "csv_path": final_csv_path,
+                    "tipo_login": tipo_login,
                 },
             )
         else:

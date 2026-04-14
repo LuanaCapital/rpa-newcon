@@ -11,6 +11,9 @@ from playwright_stealth import apply_stealth_to_page
 LOGIN = os.getenv("LOGIN")
 PASSWORD = os.getenv("PASSWORD")
 URL_LOGIN_PARCEIROS = os.getenv("URL_LOGIN")
+RODOBENS_URL = os.getenv("RODOBENS_URL")
+RODOBENS_USUARIO = os.getenv("RODOBENS_USUARIO")
+RODOBENS_SENHA = os.getenv("RODOBENS_SENHA")
 
 async def autenticar_e_abrir_newcon(context: BrowserContext) -> Page:
     """
@@ -38,3 +41,18 @@ async def autenticar_e_abrir_newcon(context: BrowserContext) -> Page:
     await newcon_login.login(LOGIN, PASSWORD)
 
     return newcon_page
+
+
+async def autenticar_e_abrir_newcon_rodobens(context: BrowserContext) -> Page:
+    page = await context.new_page()
+
+    await page.goto(RODOBENS_URL, wait_until="domcontentloaded")
+
+    await page.screenshot(path="rodobens_debug.png", full_page=True)
+    await page.fill("#edtUsuario", RODOBENS_USUARIO)
+    await page.fill("#edtSenha", RODOBENS_SENHA)
+
+    async with page.expect_navigation(wait_until="networkidle"):
+        await page.click("#btnLogin")
+
+    return page

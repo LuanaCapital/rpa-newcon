@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from playwright.async_api import Page
 
 from mappers import newcon_result_to_cota_status
-from pages.newcon_atendimento_page import NewconAtendimentoPage
+from pages.newcon_atendimento_page import NewconAtendimentoPage, ConsorciadoInvalidoError
 from pages.newcon_menu_page import NewconMenuPage
 from pages.newcon_pendencias_page import NewconPendenciasPage
 from csv_writer import append_rows
@@ -24,6 +24,19 @@ load_dotenv()
 logger = get_logger(__name__)
 
 FINAL_HEADERS = ["grupo", "cota", "resultado", "piperun_result", "pago", "erro"]
+
+CONSULTA_COTAS = [
+    "grupo",
+    "cota",
+    "existe",
+    "nome_completo",
+    "data_adesao",
+    "data_alocacao",
+    "contrato",
+    "quantidade_parcelas",
+    "data_vencimento",
+    "erro",
+]
 
 
 def append_relatorio_final(csv_path: str, row: dict):
@@ -274,3 +287,83 @@ async def processar_cliente(
             "erro": erro_detalhado,
             "pago": "",
         }
+
+
+async def consultar_cliente_canopus(
+    newcon_page: Page,
+    grupo: str,
+    cota: str,
+    *,
+    csv_path: str,
+    final_csv_path: str,
+) -> dict:
+    grupo6 = str(grupo).zfill(6)
+    cota4 = str(cota).zfill(4)
+
+    atendimento = NewconAtendimentoPage(newcon_page)
+
+    try:
+        await atendimento.buscar_consorciado(grupo6, cota4)
+        dados = await atendimento.extrair_dados_cadastrais()
+
+        resultado = {
+            "grupo": grupo6,
+            "cota": cota4,
+            "existe": True,
+            "nome_completo": dados.get("nome_completo", ""),
+            "data_adesao": dados.get("data_adesao", ""),
+            "data_alocacao": dados.get("data_alocacao", ""),
+            "contrato": dados.get("contrato", ""),
+            "quantidade_parcelas": dados.get("quantidade_parcelas", ""),
+            "data_vencimento": dados.get("data_vencimento", ""),
+            "erro": ""
+        }
+
+    except ConsorciadoInvalidoError:
+        resultado = {
+            "grupo": grupo6,
+            "cota": cota4,
+            "existe": False,
+            "nome_completo": "",
+            "data_adesao": "",
+            "data_alocacao": "",
+            "contrato": "",
+            "quantidade_parcelas": "",
+            "data_vencimento": "",
+            "erro": ""
+        }
+
+    except Exception as e:
+        resultado = {
+            "grupo": grupo6,
+            "cota": cota4,
+            "existe": False,
+            "nome_completo": "",
+            "data_adesao": "",
+            "data_alocacao": "",
+            "contrato": "",
+            "quantidade_parcelas": "",
+            "data_vencimento": "",
+            "erro": str(e)
+        }
+
+    append_rows(csv_path, [resultado])
+    append_relatorio_consulta(final_csv_path, resultado)
+
+    return resultado
+
+def append_relatorio_consulta(csv_path: str, row: dict):
+    directory = os.path.dirname(csv_path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
+    file_exists = os.path.exists(csv_path)
+
+    with open(csv_path, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=CONSULTA_COTAS)
+
+        if not file_exists:
+            writer.writeheader()
+
+        out = {h: row.get(h, "") for h in CONSULTA_COTAS}
+        writer.writerow(out)
