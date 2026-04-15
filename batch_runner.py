@@ -66,13 +66,14 @@ async def processar_cliente(
     *,
     analysis_month: int,
     analysis_year: int,
+    tipo_login: str = "canopus",
 ) -> dict[str, Any]:
     grupo6, cota4 = _zfill(grupo, cota)
 
     atendimento = NewconAtendimentoPage(newcon_page)
-    menu = NewconMenuPage(newcon_page)
-    pendencias = NewconPendenciasPage(newcon_page)
-
+    menu = NewconMenuPage(newcon_page, tipo_login=tipo_login)
+    pendencias = NewconPendenciasPage(newcon_page, tipo_login=tipo_login)
+    
     try:
         await atendimento.buscar_consorciado(grupo6, cota4)
         await menu.abrir_emissao_cobranca()

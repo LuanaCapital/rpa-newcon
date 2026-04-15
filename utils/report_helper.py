@@ -28,7 +28,7 @@ def salvar_resultado_csv(execution_id: str, resultado: dict):
             fieldnames=[
                 "deal_id",
                 "grupo",
-                "cota",
+                "cota_base",
                 "pago",
                 "cota_pendencia",
                 "vencimento",
@@ -55,7 +55,7 @@ def salvar_resultado_csv(execution_id: str, resultado: dict):
                 {
                     "deal_id": resultado.get("piperun_result", {}).get("deal_id"),
                     "grupo": resultado.get("grupo"),
-                    "cota": resultado.get("cota"),
+                    "cota_base": resultado.get("cota"),
                     "pago": resultado.get("pago"),
                     "cota_pendencia": cota_item.get("cota"),
                     "vencimento": cota_item.get("vencimento"),

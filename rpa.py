@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 
 from batch_runner import processar_cliente, logger
-from pages.auth_flow import autenticar_e_abrir_newcon
+from pages.auth_flow import autenticar_e_abrir_newcon, autenticar_rodobens_e_abrir_newcon
 from pages.login import LoginPage
 from pages.newcon_atendimento_page import NewconAtendimentoPage
 from pages.newcon_menu_page import NewconMenuPage
@@ -24,27 +24,23 @@ if not LOGIN or not PASSWORD or not URL_LOGIN_PARCEIROS:
     raise RuntimeError("LOGIN, PASSWORD ou URL_LOGIN não estão definidos no .env")
 
 
-async def run_fluxo_newcon(grupo: str, cota: str):
+async def run_fluxo_newcon(
+    grupo: str,
+    cota: str,
+    tipo_login: str = "canopus",
+):
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=False)
         context = await browser.new_context()
 
         await setup_context_with_stealth(context)
 
-        page = await context.new_page()
-
-        await apply_stealth_to_page(page)
-
-        parceiros_login = LoginPage(page, URL_LOGIN_PARCEIROS)
-        await parceiros_login.login(LOGIN, PASSWORD)
-
-        parceiros_home = ParceirosHomePage(page)
-        newcon_page = await parceiros_home.abrir_newcon()
-
-        await apply_stealth_to_page(newcon_page)
-
-        newcon_login = NewconLoginPage(newcon_page)
-        await newcon_login.login(LOGIN, PASSWORD)
+        if tipo_login == "canopus":
+            newcon_page = await autenticar_e_abrir_newcon(context)
+        elif tipo_login == "rodobens":
+            newcon_page = await autenticar_rodobens_e_abrir_newcon(context)
+        else:
+            raise ValueError(f"tipo_login inválido: {tipo_login}")
 
         atendimento = NewconAtendimentoPage(newcon_page)
         await atendimento.buscar_consorciado(grupo=grupo, cota=cota)
@@ -52,10 +48,13 @@ async def run_fluxo_newcon(grupo: str, cota: str):
         menu = NewconMenuPage(newcon_page)
         await menu.abrir_emissao_cobranca()
 
-        pendencias_page = NewconPendenciasPage(newcon_page)
+        pendencias_page = NewconPendenciasPage(newcon_page, tipo_login=tipo_login)
         await pendencias_page.listar_outras_cotas_e_atualizar()
 
         resultado = await pendencias_page.resultado_em_aberto_por_cota()
+        url_final = newcon_page.url
+
+        await context.close()
         await browser.close()
 
         return {
@@ -63,7 +62,8 @@ async def run_fluxo_newcon(grupo: str, cota: str):
             "grupo": grupo,
             "cota_base": cota,
             "resultado": resultado,
-            "url": newcon_page.url,
+            "url": url_final,
+            "tipo_login": tipo_login,
         }
 
 
@@ -73,17 +73,23 @@ async def run_lote(
     analysis_month: int,
     analysis_year: int,
     execution_id: str,
+    tipo_login: str = "canopus",
 ) -> dict:
     resultados = []
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=False)
 
         context = await browser.new_context()
 
         await setup_context_with_stealth(context)
 
-        newcon_page = await autenticar_e_abrir_newcon(context)
+        if tipo_login == "canopus":
+            newcon_page = await autenticar_e_abrir_newcon(context)
+        elif tipo_login == "rodobens":
+            newcon_page = await autenticar_rodobens_e_abrir_newcon(context)
+        else:
+            raise ValueError(f"tipo_login inválido: {tipo_login}")
 
         os.makedirs("relatorios", exist_ok=True)
         data_str = f"{analysis_year}-{analysis_month:02d}"
@@ -103,6 +109,7 @@ async def run_lote(
                     "cota": cota,
                     "analysis_month": analysis_month,
                     "analysis_year": analysis_year,
+                    "tipo_login": tipo_login,
                 },
             )
 
@@ -112,7 +119,12 @@ async def run_lote(
 
                 await setup_context_with_stealth(context)
 
-                newcon_page = await autenticar_e_abrir_newcon(context)
+                if tipo_login == "canopus":
+                    newcon_page = await autenticar_e_abrir_newcon(context)
+                elif tipo_login == "rodobens":
+                    newcon_page = await autenticar_rodobens_e_abrir_newcon(context)
+                else:
+                    raise ValueError(f"tipo_login inválido: {tipo_login}")
 
             resultado = await processar_cliente(
                 newcon_page,
@@ -122,6 +134,7 @@ async def run_lote(
                 final_csv_path=final_csv_path,
                 analysis_month=analysis_month,
                 analysis_year=analysis_year,
+                tipo_login=tipo_login,
             )
             resultados.append(resultado)
 
@@ -133,6 +146,7 @@ async def run_lote(
                         "grupo": grupo,
                         "cota": cota,
                         "erro": resultado.get("erro"),
+                        "tipo_login": tipo_login,
                     },
                 )
 
@@ -146,6 +160,7 @@ async def run_lote(
                         "grupo": grupo,
                         "cota": cota,
                         "error": str(e),
+                        "tipo_login": tipo_login,
                     },
                 )
 
@@ -159,6 +174,7 @@ async def run_lote(
                     "execution_id": execution_id,
                     "total_clientes": len(resultados),
                     "csv_path": final_csv_path,
+                    "tipo_login": tipo_login,
                 },
             )
         else:
@@ -166,5 +182,6 @@ async def run_lote(
 
     return {
         "ok": True,
+        "tipo_login": tipo_login,
         "resultados": resultados,
     }

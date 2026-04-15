@@ -3,11 +3,14 @@
 from playwright.async_api import Page
 
 class NewconMenuPage:
-    def __init__(self, page: Page):
+    def __init__(self, page: Page, tipo_login: str = "canopus"):
         self.page = page
+        self.tipo_login = tipo_login
 
-        # Link "Emissão de Cobrança"
-        self.link_emissao_cobranca = 'a#ctl00_Conteudo_Menu_CONAT_grdMenu_CONAT_ctl05_hlkFormulario'
+        if tipo_login == "rodobens":
+            self.link_emissao_cobranca = 'a#ctl00_Conteudo_Menu_CONAT_grdMenu_CONAT_ctl06_hlkFormulario'
+        else:
+            self.link_emissao_cobranca = 'a#ctl00_Conteudo_Menu_CONAT_grdMenu_CONAT_ctl05_hlkFormulario'
 
     async def abrir_emissao_cobranca(self):
         """Clica no link Emissão de Cobrança e espera navegar."""

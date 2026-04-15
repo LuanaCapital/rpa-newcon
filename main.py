@@ -34,6 +34,20 @@ async def newcon_lote(payload: NewconLoteRequest):
             analysis_month=payload.analysis_month,
             analysis_year=payload.analysis_year,
             execution_id=payload.execution_id,
+            tipo_login="canopus",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/rodobens/lote/rodobens")
+async def rodobens_lote(payload: NewconLoteRequest):
+    try:
+        return await run_lote(
+            [c.model_dump() for c in payload.clientes],
+            analysis_month=payload.analysis_month,
+            analysis_year=payload.analysis_year,
+            execution_id=payload.execution_id,
+            tipo_login="rodobens",
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
