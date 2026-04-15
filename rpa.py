@@ -26,7 +26,7 @@ if not LOGIN or not PASSWORD or not URL_LOGIN_PARCEIROS:
 
 async def run_fluxo_newcon(grupo: str, cota: str):
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
 
         await setup_context_with_stealth(context)
@@ -78,7 +78,7 @@ async def run_lote(
     resultados = []
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(headless=True)
 
         context = await browser.new_context()
         await setup_context_with_stealth(context)
