@@ -3,47 +3,43 @@
 import os
 from playwright.async_api import BrowserContext, Page
 
-from pages.login import LoginPage
-from pages.newcon_atendimento_page import NewconAtendimentoPage
-from pages.parceiros_home_page import ParceirosHomePage
 from pages.newcon_login_page import NewconLoginPage
 from pages.rodobens_login_page import RodobensLoginPage
 from playwright_stealth import apply_stealth_to_page
 
 LOGIN = os.getenv("LOGIN")
 PASSWORD = os.getenv("PASSWORD")
-URL_LOGIN_PARCEIROS = os.getenv("URL_LOGIN")
+URL_LOGIN_NEWCON = os.getenv("URL_LOGIN")
 
 RODOBENS_USUARIO = os.getenv("RODOBENS_USUARIO")
 RODOBENS_SENHA = os.getenv("RODOBENS_SENHA")
 RODOBENS_URL = os.getenv("RODOBENS_URL")
 
+
 async def autenticar_e_abrir_newcon(context: BrowserContext) -> Page:
     """
-    Faz login no Parceiros e abre o NewCon (nova aba) + loga no NewCon.
-    Retorna a Page do NewCon pronta.
+    Fluxo Canopus direto:
+    login -> clicar em Atendimento (ctl00$img_Atendimento)
     """
     page = await context.new_page()
-    
-    # Aplicar stealth mode à página
+
+    # Stealth
     await apply_stealth_to_page(page)
 
-    # Parceiros login
-    parceiros_login = LoginPage(page, URL_LOGIN_PARCEIROS)
-    await parceiros_login.login(LOGIN, PASSWORD)
+    # Acessa direto a URL do NewCon
+    await page.goto(URL_LOGIN_NEWCON, wait_until="domcontentloaded")
 
-    # Abrir NewCon
-    parceiros_home = ParceirosHomePage(page)
-    newcon_page = await parceiros_home.abrir_newcon()
-    
-    # Aplicar stealth mode à nova página
-    await apply_stealth_to_page(newcon_page)
-
-    # Login NewCon
-    newcon_login = NewconLoginPage(newcon_page)
+    # Login
+    newcon_login = NewconLoginPage(page)
     await newcon_login.login(LOGIN, PASSWORD)
 
-    return newcon_page
+    # Clicar no Atendimento
+    atendimento_button = page.locator('#ctl00_img_Atendimento, [name="ctl00$img_Atendimento"]')
+    await atendimento_button.wait_for(state="visible", timeout=20000)
+    await atendimento_button.click()
+
+    return page
+
 
 async def autenticar_rodobens_e_abrir_newcon(context: BrowserContext) -> Page:
     page = await context.new_page()
